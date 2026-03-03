@@ -40,7 +40,7 @@ export const blogItems: BlogItemType[] = [
   {
     title: "Fixing a Silent Notion Sync Failure in Dify",
     excerpt: "How a one-line serialization regression broke Notion sync for all Dify v1.13.0 self-hosted users, and how I traced it through a masking test fixture to deliver a clean fix with regression coverage.",
-    image: '/img/blog5.jpg',
+    image: '/img/dify-notion-sync-bug.svg',
     url: '/blog/2026-03-01-dify-notion-sync-serialization-fix',
     date: 'March 1, 2026',
     category: 'Open Source',
@@ -58,9 +58,15 @@ export const blogItems: BlogItemType[] = [
   <li><strong>Main source file:</strong> <a href="https://github.com/langgenius/dify/blob/main/api/tasks/document_indexing_sync_task.py" target="_blank" rel="noopener noreferrer">document_indexing_sync_task.py</a></li>
 </ul>
 
+<h2>Bug Flow Overview</h2>
+<figure>
+  <img src="/img/dify-notion-sync-bug.svg" alt="Dify Notion Sync Bug — data flow diagram showing how a raw dict caused psycopg2 ProgrammingError and how json.dumps fixed it" class="my-4" />
+  <figcaption>Top: the broken data path in v1.13.0. Middle: the fixed path after <a href="https://github.com/langgenius/dify/pull/32747" target="_blank" rel="noopener noreferrer">PR #32747</a>. Bottom: why the existing test suite missed it.</figcaption>
+</figure>
+
 <h2>Background</h2>
 <p>Dify allows users to connect external knowledge sources — including Notion — as retrieval-augmented context for LLM applications. When a Notion page is modified, users click "Sync" in the Dify dashboard to pull the latest content into their knowledge base.</p>
-<p>After upgrading to v1.13.0, self-hosted users reported that the sync button appeared to finish instantly, but the content was never updated. No user-facing error was shown — the failure was completely silent.</p>
+<p>After upgrading to v1.13.0, self-hosted users reported that the sync button appeared to finish instantly, but the content was never updated. No user-facing error was shown — the failure was completely silent. (See <a href="https://github.com/langgenius/dify/issues/32705" target="_blank" rel="noopener noreferrer">Issue #32705</a> for the original bug report.)</p>
 
 <h2>The Symptom</h2>
 <p>In the Docker worker logs, the real error was buried:</p>
@@ -77,7 +83,7 @@ document.data_source_info = data_source_info         # ← raw dict to LongText 
 
 <p>The <code>data_source_info</code> column is a <code>LongText</code> field in the database. It stores JSON as a plain string, not as a native JSON type. Assigning a Python <code>dict</code> directly to this column causes psycopg2 to reject it at commit time.</p>
 
-<p>This regression was introduced in <a href="https://github.com/langgenius/dify/pull/32129" target="_blank" rel="noopener noreferrer">PR #32129</a>, which refactored the sync task to use split database sessions. During the refactor, the original <code>json.dumps()</code> call was accidentally dropped.</p>
+<p>This regression was introduced in <a href="https://github.com/langgenius/dify/pull/32129" target="_blank" rel="noopener noreferrer">PR #32129</a>, which refactored the sync task to use split database sessions. During the refactor, the original <code>json.dumps()</code> call was accidentally dropped. You can see <a href="https://github.com/langgenius/dify/pull/32747/files" target="_blank" rel="noopener noreferrer">the full diff of my fix here</a>.</p>
 
 <h2>The Masking Test Fixture</h2>
 <p>What made this bug especially interesting was that the existing integration tests did not catch it. Why?</p>
@@ -131,7 +137,7 @@ ruff format --check
 pytest api/tests/unit_tests/tasks/test_document_indexing_sync_task.py -v</code></pre>
 
 <h2>Review and Merge</h2>
-<p>The PR was reviewed and approved by <a href="https://github.com/crazywoola" target="_blank" rel="noopener noreferrer">@crazywoola</a>, a Dify core maintainer, and merged on March 1, 2026. The patch scope was intentionally small — one functional line, one removed fixture, one added test — to minimize review burden and merge risk.</p>
+<p>The <a href="https://github.com/langgenius/dify/pull/32747" target="_blank" rel="noopener noreferrer">PR</a> was reviewed and approved by <a href="https://github.com/crazywoola" target="_blank" rel="noopener noreferrer">@crazywoola</a>, a Dify core maintainer, and <a href="https://github.com/langgenius/dify/pull/32747" target="_blank" rel="noopener noreferrer">merged on March 1, 2026</a>. The patch scope was intentionally small — one functional line, one removed fixture, one added test — to minimize review burden and merge risk.</p>
 
 <h2>Lessons Learned</h2>
 <ul>
